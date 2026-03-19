@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GridWorld 地圖建立</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>GridWorld 地圖建立（1-1）</h1>
+
+      <section class="controls">
+        <div class="row">
+          <label for="grid-size">地圖大小 n（5~9）</label>
+          <input id="grid-size" type="number" min="5" max="9" value="5" />
+          <button id="build-grid-btn" type="button">建立網格</button>
+        </div>
+
+        <div class="row mode-row">
+          <span>點擊模式：</span>
+          <label><input type="radio" name="mode" value="start" checked /> 起點</label>
+          <label><input type="radio" name="mode" value="end" /> 終點</label>
+          <label><input type="radio" name="mode" value="obstacle" /> 障礙物</label>
+        </div>
+
+        <div class="row">
+          <button id="reset-btn" type="button">重置目前地圖</button>
+          <button id="validate-btn" type="button">檢查是否符合條件</button>
+        </div>
+      </section>
+
+      <section class="status">
+        <p id="status-line">請先建立網格，然後設定起點、終點與障礙物。</p>
+      </section>
+
+      <section class="grid-wrapper">
+        <div id="grid" class="grid" aria-label="grid-map"></div>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

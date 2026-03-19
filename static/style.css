@@ -1,0 +1,135 @@
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #475569;
+  --line: #cbd5e1;
+  --primary: #0f766e;
+  --start: #22c55e;
+  --end: #ef4444;
+  --obstacle: #9ca3af;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: radial-gradient(circle at top right, #e2e8f0, var(--bg));
+  color: var(--text);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+}
+
+h1 {
+  margin: 0 0 18px;
+  font-size: 1.6rem;
+}
+
+.controls {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row + .row {
+  margin-top: 12px;
+}
+
+input[type="number"] {
+  width: 88px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 1rem;
+}
+
+button {
+  border: 1px solid #0f766e;
+  background: var(--primary);
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.04);
+}
+
+.mode-row label {
+  background: #f1f5f9;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.status {
+  margin: 14px 0 10px;
+  color: var(--muted);
+}
+
+.grid-wrapper {
+  overflow-x: auto;
+}
+
+.grid {
+  display: grid;
+  gap: 6px;
+  width: fit-content;
+  padding: 10px;
+  background: #e2e8f0;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+}
+
+.cell {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.cell.start {
+  background: var(--start);
+  color: #052e16;
+}
+
+.cell.end {
+  background: var(--end);
+  color: #450a0a;
+}
+
+.cell.obstacle {
+  background: var(--obstacle);
+  color: #111827;
+}
+
+@media (max-width: 640px) {
+  .cell {
+    width: 46px;
+    height: 46px;
+    font-size: 0.9rem;
+  }
+}
