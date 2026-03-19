@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GridWorld 地圖建立</title>
+    <title>GridWorld 1-1 / 1-2</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
     <main class="container">
-      <h1>GridWorld 地圖建立（1-1）</h1>
+      <h1>GridWorld 地圖建立與策略評估（1-1 / 1-2）</h1>
 
       <section class="controls">
         <div class="row">
@@ -28,10 +28,29 @@
           <button id="reset-btn" type="button">重置目前地圖</button>
           <button id="validate-btn" type="button">檢查是否符合條件</button>
         </div>
+
+        <hr />
+
+        <div class="row">
+          <button id="generate-policy-btn" type="button">產生隨機策略（1-2）</button>
+          <button id="evaluate-policy-btn" type="button">策略評估（1-2）</button>
+        </div>
+
+        <div class="row">
+          <label for="gamma-input">gamma</label>
+          <input id="gamma-input" type="number" min="0" max="1" step="0.01" value="0.9" />
+          <label for="theta-input">theta</label>
+          <input id="theta-input" type="number" min="0.000001" step="0.0001" value="0.0001" />
+          <label for="max-iter-input">max iterations</label>
+          <input id="max-iter-input" type="number" min="1" step="1" value="1000" />
+        </div>
       </section>
 
       <section class="status">
         <p id="status-line">請先建立網格，然後設定起點、終點與障礙物。</p>
+        <p class="hint">
+          1-2 固定獎勵：每步 -1，進入終點 0。先產生隨機策略，再執行策略評估。
+        </p>
       </section>
 
       <section class="grid-wrapper">
