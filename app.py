@@ -54,8 +54,8 @@ def validate_and_normalize_grid(payload: dict) -> Tuple[dict, str]:
     if not isinstance(obstacles, list):
         return {}, "obstacles 必須是座標陣列。"
     expected_obstacles = n - 2
-    if len(obstacles) != expected_obstacles:
-        return {}, f"障礙物數量需為 n-2，目前 n={n}，應為 {expected_obstacles}。"
+    if len(obstacles) > expected_obstacles:
+        return {}, f"障礙物數量最多 n-2，目前 n={n}，上限為 {expected_obstacles}。"
 
     obstacle_set: Set[Tuple[int, int]] = set()
     for coord in obstacles:
@@ -262,6 +262,44 @@ def train_policy_iteration(
     return policy, values, policy_iterations, total_eval_iterations, final_delta, converged
 
 
+def extract_best_path(
+    n: int,
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+    obstacles: Set[Tuple[int, int]],
+    policy: Dict[str, str],
+) -> Tuple[List[List[int]], bool]:
+    max_steps = n * n * 4
+    path: List[List[int]] = [[start[0], start[1]]]
+    if start == end:
+        return path, True
+
+    current = start
+    visited = {start}
+
+    for _ in range(max_steps):
+        current_key = key_of(current[0], current[1])
+        action = policy.get(current_key)
+        if action not in ACTIONS:
+            return path, False
+
+        nr, nc = move(n, current[0], current[1], action, obstacles)
+        next_state = (nr, nc)
+        if next_state == current:
+            return path, False
+
+        path.append([nr, nc])
+        if next_state == end:
+            return path, True
+        if next_state in visited:
+            return path, False
+
+        visited.add(next_state)
+        current = next_state
+
+    return path, False
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -389,19 +427,32 @@ def train_policy_api():
         max_policy_iterations=max_policy_iterations,
         max_eval_iterations=max_eval_iterations,
     )
+    best_path, reached_goal = extract_best_path(
+        n=normalized["n"],
+        start=normalized["start"],
+        end=normalized["end"],
+        obstacles=normalized["obstacles"],
+        policy=trained_policy,
+    )
 
     return jsonify(
         {
             "ok": True,
             "policy": trained_policy,
             "values": values,
+            "best_path": best_path,
+            "reached_goal": reached_goal,
             "policy_iterations": policy_iterations,
             "eval_iterations": eval_iterations,
             "delta": delta,
             "converged": converged,
-            "message": "1-3 訓練完成。"
-            if converged
-            else "達到最大策略迭代次數，尚未完全收斂。",
+            "message": (
+                "1-3 訓練完成，且最佳路徑已到達終點。"
+                if converged and reached_goal
+                else "1-3 訓練完成，但目前策略路徑尚未到達終點。"
+                if converged
+                else "達到最大策略迭代次數，尚未完全收斂。"
+            ),
         }
     )
 

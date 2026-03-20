@@ -28,6 +28,7 @@ const state = {
   obstacles: new Set(),
   policy: {},
   values: {},
+  bestPath: new Set(),
 };
 
 function keyOf(r, c) {
@@ -47,6 +48,7 @@ function currentMode() {
 function clearPolicyAndValues() {
   state.policy = {};
   state.values = {};
+  state.bestPath.clear();
 }
 
 function updateStatus(extra = "") {
@@ -54,9 +56,10 @@ function updateStatus(extra = "") {
   const obstacleCount = state.obstacles.size;
   const policyCount = Object.keys(state.policy).length;
   const valueCount = Object.keys(state.values).length;
+  const bestPathCount = state.bestPath.size;
   const base = `n=${state.n}；障礙物 ${obstacleCount}/${limit}；起點：${
     state.start ? state.start.join(",") : "未設定"
-  }；終點：${state.end ? state.end.join(",") : "未設定"}；策略格數：${policyCount}；價值格數：${valueCount}`;
+  }；終點：${state.end ? state.end.join(",") : "未設定"}；策略格數：${policyCount}；價值格數：${valueCount}；路徑格數：${bestPathCount}`;
   statusLine.textContent = extra ? `${base}｜${extra}` : base;
 }
 
@@ -115,10 +118,13 @@ function applyClick(r, c) {
 }
 
 function cellClass(r, c) {
-  if (state.start && state.start[0] === r && state.start[1] === c) return "start";
-  if (state.end && state.end[0] === r && state.end[1] === c) return "end";
-  if (state.obstacles.has(keyOf(r, c))) return "obstacle";
-  return "";
+  const key = keyOf(r, c);
+  const classes = [];
+  if (state.start && state.start[0] === r && state.start[1] === c) classes.push("start");
+  if (state.end && state.end[0] === r && state.end[1] === c) classes.push("end");
+  if (state.obstacles.has(key)) classes.push("obstacle");
+  if (!state.obstacles.has(key) && state.bestPath.has(key)) classes.push("path");
+  return classes.join(" ");
 }
 
 function buildCellMarker(r, c) {
@@ -206,6 +212,7 @@ async function generatePolicy() {
   const result = await postJson("/api/generate-policy", buildPayload());
   state.policy = result.policy || {};
   state.values = {};
+  state.bestPath.clear();
   renderGrid();
   updateStatus(result.message);
 }
@@ -243,6 +250,7 @@ async function evaluatePolicy() {
   const result = await postJson("/api/evaluate-policy", payload);
 
   state.values = result.values || {};
+  state.bestPath.clear();
   renderGrid();
   updateStatus(
     `${result.message} iterations=${result.iterations}，delta=${Number(result.delta).toExponential(
@@ -299,11 +307,12 @@ async function trainPolicy() {
 
   state.policy = result.policy || {};
   state.values = result.values || {};
+  state.bestPath = new Set((result.best_path || []).map(([r, c]) => keyOf(r, c)));
   renderGrid();
   updateStatus(
     `${result.message} policy_iters=${result.policy_iterations}，eval_iters=${result.eval_iterations}，delta=${Number(
       result.delta
-    ).toExponential(3)}，converged=${result.converged}`
+    ).toExponential(3)}，converged=${result.converged}，reached_goal=${result.reached_goal}`
   );
 }
 
