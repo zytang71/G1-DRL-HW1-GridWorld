@@ -175,17 +175,25 @@ button:hover {
 }
 
 .cell.path {
-  box-shadow: inset 0 0 0 2px #fbbf24;
+  box-shadow: inset 0 0 0 2px #86efac;
 }
 
 .cell.path-pending {
-  box-shadow: inset 0 0 0 2px #fcd34d;
-  opacity: 0.85;
+  box-shadow: inset 0 0 0 2px #bbf7d0;
+  opacity: 0.95;
 }
 
 .cell.path-active {
-  box-shadow: inset 0 0 0 3px #f59e0b;
+  box-shadow: inset 0 0 0 3px #22c55e;
   opacity: 1;
+}
+
+.cell.path-pending:not(.start):not(.end) {
+  background: #f0fdf4;
+}
+
+.cell.path-active:not(.start):not(.end) {
+  background: #dcfce7;
 }
 
 .cell.start .coord,
