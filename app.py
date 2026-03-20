@@ -92,6 +92,28 @@ def generate_random_policy(n: int, end: Tuple[int, int], obstacles: Set[Tuple[in
     return policy
 
 
+def normalize_policy(
+    n: int, end: Tuple[int, int], obstacles: Set[Tuple[int, int]], policy_payload: dict
+) -> Dict[str, str]:
+    policy: Dict[str, str] = {}
+    for r in range(n):
+        for c in range(n):
+            if (r, c) in obstacles or (r, c) == end:
+                continue
+            key = key_of(r, c)
+            action = policy_payload.get(key)
+            if action not in ACTIONS:
+                action = "up"
+            policy[key] = action
+    return policy
+
+
+def transition_reward(
+    nr: int, nc: int, end: Tuple[int, int], step_reward: float, goal_reward: float
+) -> float:
+    return goal_reward if (nr, nc) == end else step_reward
+
+
 def evaluate_policy(
     n: int,
     end: Tuple[int, int],
@@ -100,6 +122,8 @@ def evaluate_policy(
     gamma: float,
     theta: float,
     max_iterations: int,
+    step_reward: float,
+    goal_reward: float,
 ) -> Tuple[Dict[str, float], int, float, bool]:
     values: Dict[str, float] = {}
     for r in range(n):
@@ -130,8 +154,7 @@ def evaluate_policy(
                 nr, nc = move(n, r, c, action, obstacles)
                 next_key = key_of(nr, nc)
 
-                # 1-2 固定獎勵設定：每步 -1，進入終點獎勵 0。
-                reward = 0.0 if (nr, nc) == end else -1.0
+                reward = transition_reward(nr, nc, end, step_reward, goal_reward)
                 updated_value = reward + gamma * values[next_key]
 
                 delta = max(delta, abs(updated_value - values[current_key]))
@@ -146,6 +169,99 @@ def evaluate_policy(
     return values, max_iterations, final_delta, converged
 
 
+def improve_policy(
+    n: int,
+    end: Tuple[int, int],
+    obstacles: Set[Tuple[int, int]],
+    values: Dict[str, float],
+    old_policy: Dict[str, str],
+    gamma: float,
+    step_reward: float,
+    goal_reward: float,
+) -> Tuple[Dict[str, str], bool]:
+    new_policy: Dict[str, str] = {}
+    stable = True
+
+    for r in range(n):
+        for c in range(n):
+            if (r, c) in obstacles or (r, c) == end:
+                continue
+
+            state_key = key_of(r, c)
+            old_action = old_policy.get(state_key, "up")
+            best_action = old_action if old_action in ACTIONS else "up"
+            best_q = float("-inf")
+
+            for action in ACTIONS:
+                nr, nc = move(n, r, c, action, obstacles)
+                next_key = key_of(nr, nc)
+                reward = transition_reward(nr, nc, end, step_reward, goal_reward)
+                q = reward + gamma * values[next_key]
+                if q > best_q:
+                    best_q = q
+                    best_action = action
+
+            new_policy[state_key] = best_action
+            if best_action != old_action:
+                stable = False
+
+    return new_policy, stable
+
+
+def train_policy_iteration(
+    n: int,
+    end: Tuple[int, int],
+    obstacles: Set[Tuple[int, int]],
+    initial_policy: Dict[str, str],
+    gamma: float,
+    theta: float,
+    step_reward: float,
+    goal_reward: float,
+    max_policy_iterations: int,
+    max_eval_iterations: int,
+) -> Tuple[Dict[str, str], Dict[str, float], int, int, float, bool]:
+    policy = initial_policy.copy()
+    values: Dict[str, float] = {}
+    total_eval_iterations = 0
+    final_delta = 0.0
+    policy_iterations = 0
+    converged = False
+
+    for outer_iter in range(1, max_policy_iterations + 1):
+        values, eval_iters, delta, _ = evaluate_policy(
+            n=n,
+            end=end,
+            obstacles=obstacles,
+            policy=policy,
+            gamma=gamma,
+            theta=theta,
+            max_iterations=max_eval_iterations,
+            step_reward=step_reward,
+            goal_reward=goal_reward,
+        )
+        total_eval_iterations += eval_iters
+        final_delta = delta
+
+        improved_policy, stable = improve_policy(
+            n=n,
+            end=end,
+            obstacles=obstacles,
+            values=values,
+            old_policy=policy,
+            gamma=gamma,
+            step_reward=step_reward,
+            goal_reward=goal_reward,
+        )
+        policy = improved_policy
+        policy_iterations = outer_iter
+
+        if stable:
+            converged = True
+            break
+
+    return policy, values, policy_iterations, total_eval_iterations, final_delta, converged
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -157,7 +273,7 @@ def validate_grid():
     _, error = validate_and_normalize_grid(payload)
     if error:
         return jsonify({"ok": False, "message": error}), 400
-    return jsonify({"ok": True, "message": "地圖設定完成，可進入 1-2 策略顯示與價值評估。"})
+    return jsonify({"ok": True, "message": "地圖設定完成，可進入 1-2/1-3。"})
 
 
 @app.post("/api/generate-policy")
@@ -197,10 +313,14 @@ def evaluate_policy_api():
         n=normalized["n"],
         end=normalized["end"],
         obstacles=normalized["obstacles"],
-        policy=policy,
+        policy=normalize_policy(
+            normalized["n"], normalized["end"], normalized["obstacles"], policy
+        ),
         gamma=float(gamma),
         theta=float(theta),
         max_iterations=max_iterations,
+        step_reward=-1.0,
+        goal_reward=0.0,
     )
     return jsonify(
         {
@@ -212,6 +332,76 @@ def evaluate_policy_api():
             "message": "策略評估完成。"
             if converged
             else "達到最大迭代次數，尚未達到收斂門檻。",
+        }
+    )
+
+
+@app.post("/api/train-policy")
+def train_policy_api():
+    payload = request.get_json(silent=True) or {}
+    normalized, error = validate_and_normalize_grid(payload)
+    if error:
+        return jsonify({"ok": False, "message": error}), 400
+
+    policy_payload = payload.get("policy")
+    if not isinstance(policy_payload, dict):
+        return jsonify({"ok": False, "message": "請先提供初始策略（可先執行 1-2）。"}), 400
+
+    gamma = payload.get("gamma", 0.9)
+    theta = payload.get("theta", 1e-4)
+    step_reward = payload.get("step_reward", -1.0)
+    goal_reward = payload.get("goal_reward", 10.0)
+    max_eval_iterations = payload.get("max_eval_iterations", 1000)
+    max_policy_iterations = payload.get("max_policy_iterations", 200)
+
+    if not isinstance(gamma, (float, int)) or gamma < 0 or gamma > 1:
+        return jsonify({"ok": False, "message": "gamma 必須介於 0 到 1。"}), 400
+    if not isinstance(theta, (float, int)) or theta <= 0:
+        return jsonify({"ok": False, "message": "theta 必須大於 0。"}), 400
+    if not isinstance(step_reward, (float, int)):
+        return jsonify({"ok": False, "message": "step_reward 必須是數值。"}), 400
+    if not isinstance(goal_reward, (float, int)):
+        return jsonify({"ok": False, "message": "goal_reward 必須是數值。"}), 400
+    if not isinstance(max_eval_iterations, int) or max_eval_iterations <= 0:
+        return jsonify({"ok": False, "message": "max_eval_iterations 必須為正整數。"}), 400
+    if not isinstance(max_policy_iterations, int) or max_policy_iterations <= 0:
+        return jsonify({"ok": False, "message": "max_policy_iterations 必須為正整數。"}), 400
+
+    initial_policy = normalize_policy(
+        normalized["n"], normalized["end"], normalized["obstacles"], policy_payload
+    )
+    (
+        trained_policy,
+        values,
+        policy_iterations,
+        eval_iterations,
+        delta,
+        converged,
+    ) = train_policy_iteration(
+        n=normalized["n"],
+        end=normalized["end"],
+        obstacles=normalized["obstacles"],
+        initial_policy=initial_policy,
+        gamma=float(gamma),
+        theta=float(theta),
+        step_reward=float(step_reward),
+        goal_reward=float(goal_reward),
+        max_policy_iterations=max_policy_iterations,
+        max_eval_iterations=max_eval_iterations,
+    )
+
+    return jsonify(
+        {
+            "ok": True,
+            "policy": trained_policy,
+            "values": values,
+            "policy_iterations": policy_iterations,
+            "eval_iterations": eval_iterations,
+            "delta": delta,
+            "converged": converged,
+            "message": "1-3 訓練完成。"
+            if converged
+            else "達到最大策略迭代次數，尚未完全收斂。",
         }
     )
 

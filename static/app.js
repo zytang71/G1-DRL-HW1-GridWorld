@@ -5,9 +5,13 @@ const resetBtn = document.getElementById("reset-btn");
 const validateBtn = document.getElementById("validate-btn");
 const generatePolicyBtn = document.getElementById("generate-policy-btn");
 const evaluatePolicyBtn = document.getElementById("evaluate-policy-btn");
+const trainPolicyBtn = document.getElementById("train-policy-btn");
 const gammaInput = document.getElementById("gamma-input");
 const thetaInput = document.getElementById("theta-input");
 const maxIterInput = document.getElementById("max-iter-input");
+const stepRewardInput = document.getElementById("step-reward-input");
+const goalRewardInput = document.getElementById("goal-reward-input");
+const maxPolicyIterInput = document.getElementById("max-policy-iter-input");
 const statusLine = document.getElementById("status-line");
 
 const actionToArrow = {
@@ -247,6 +251,62 @@ async function evaluatePolicy() {
   );
 }
 
+async function trainPolicy() {
+  if (Object.keys(state.policy).length === 0) {
+    updateStatus("請先產生隨機策略（1-2）。");
+    return;
+  }
+
+  const gamma = Number(gammaInput.value);
+  const theta = Number(thetaInput.value);
+  const maxEvalIterations = Number(maxIterInput.value);
+  const stepReward = Number(stepRewardInput.value);
+  const goalReward = Number(goalRewardInput.value);
+  const maxPolicyIterations = Number(maxPolicyIterInput.value);
+
+  if (!Number.isFinite(gamma) || gamma < 0 || gamma > 1) {
+    updateStatus("gamma 需介於 0 到 1。");
+    return;
+  }
+  if (!Number.isFinite(theta) || theta <= 0) {
+    updateStatus("theta 必須大於 0。");
+    return;
+  }
+  if (!Number.isInteger(maxEvalIterations) || maxEvalIterations <= 0) {
+    updateStatus("max iterations 必須為正整數。");
+    return;
+  }
+  if (!Number.isFinite(stepReward) || !Number.isFinite(goalReward)) {
+    updateStatus("step reward / goal reward 必須為數值。");
+    return;
+  }
+  if (!Number.isInteger(maxPolicyIterations) || maxPolicyIterations <= 0) {
+    updateStatus("max policy iter 必須為正整數。");
+    return;
+  }
+
+  const payload = {
+    ...buildPayload(),
+    policy: state.policy,
+    gamma,
+    theta,
+    step_reward: stepReward,
+    goal_reward: goalReward,
+    max_eval_iterations: maxEvalIterations,
+    max_policy_iterations: maxPolicyIterations,
+  };
+  const result = await postJson("/api/train-policy", payload);
+
+  state.policy = result.policy || {};
+  state.values = result.values || {};
+  renderGrid();
+  updateStatus(
+    `${result.message} policy_iters=${result.policy_iterations}，eval_iters=${result.eval_iterations}，delta=${Number(
+      result.delta
+    ).toExponential(3)}，converged=${result.converged}`
+  );
+}
+
 buildGridBtn.addEventListener("click", () => {
   const nValue = Number(nInput.value);
   if (!Number.isInteger(nValue) || nValue < 5 || nValue > 9) {
@@ -285,5 +345,13 @@ evaluatePolicyBtn.addEventListener("click", async () => {
   }
 });
 
+trainPolicyBtn.addEventListener("click", async () => {
+  try {
+    await trainPolicy();
+  } catch (error) {
+    updateStatus(`訓練失敗：${error.message}`);
+  }
+});
+
 renderGrid();
-updateStatus("可開始點擊格子設定地圖，接著產生隨機策略並做 1-2 策略評估。");
+updateStatus("可先做 1-2（隨機策略+評估），再做 1-3（加入 reward 訓練）。");

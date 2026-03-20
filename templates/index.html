@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GridWorld 1-1 / 1-2</title>
+    <title>GridWorld 1-1 / 1-2 / 1-3</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
   </head>
   <body>
     <main class="container">
-      <h1>GridWorld 地圖建立與策略評估（1-1 / 1-2）</h1>
+      <h1>GridWorld 地圖建立、策略評估與訓練（1-1 / 1-2 / 1-3）</h1>
 
       <section class="controls">
         <div class="row">
@@ -34,6 +34,7 @@
         <div class="row">
           <button id="generate-policy-btn" type="button">產生隨機策略（1-2）</button>
           <button id="evaluate-policy-btn" type="button">策略評估（1-2）</button>
+          <button id="train-policy-btn" type="button">開始訓練（1-3）</button>
         </div>
 
         <div class="row">
@@ -44,6 +45,15 @@
           <label for="max-iter-input">max iterations</label>
           <input id="max-iter-input" type="number" min="1" step="1" value="1000" />
         </div>
+
+        <div class="row">
+          <label for="step-reward-input">step reward</label>
+          <input id="step-reward-input" type="number" step="0.1" value="-1" />
+          <label for="goal-reward-input">goal reward</label>
+          <input id="goal-reward-input" type="number" step="0.1" value="10" />
+          <label for="max-policy-iter-input">max policy iter</label>
+          <input id="max-policy-iter-input" type="number" min="1" step="1" value="200" />
+        </div>
       </section>
 
       <section class="status">
@@ -51,6 +61,7 @@
         <p class="hint">
           1-2 固定獎勵：每步 -1，進入終點 0。先產生隨機策略，再執行策略評估。
         </p>
+        <p class="hint">1-3 會以上一步策略為初始策略，加入 reward 後做迭代訓練到收斂。</p>
       </section>
 
       <section class="grid-wrapper">
