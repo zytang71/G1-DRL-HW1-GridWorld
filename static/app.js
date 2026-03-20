@@ -6,6 +6,8 @@ const validateBtn = document.getElementById("validate-btn");
 const generatePolicyBtn = document.getElementById("generate-policy-btn");
 const evaluatePolicyBtn = document.getElementById("evaluate-policy-btn");
 const trainPolicyBtn = document.getElementById("train-policy-btn");
+const replayPathBtn = document.getElementById("replay-path-btn");
+const resetParamsBtn = document.getElementById("reset-params-btn");
 const gammaInput = document.getElementById("gamma-input");
 const thetaInput = document.getElementById("theta-input");
 const maxIterInput = document.getElementById("max-iter-input");
@@ -13,12 +15,22 @@ const stepRewardInput = document.getElementById("step-reward-input");
 const goalRewardInput = document.getElementById("goal-reward-input");
 const maxPolicyIterInput = document.getElementById("max-policy-iter-input");
 const statusLine = document.getElementById("status-line");
+const hintLine = document.getElementById("hint-line");
 
 const actionToArrow = {
   up: "↑",
   down: "↓",
   left: "←",
   right: "→",
+};
+
+const PARAM_DEFAULTS = {
+  gamma: 0.9,
+  theta: 0.0001,
+  maxIter: 1000,
+  stepReward: -1,
+  goalReward: 10,
+  maxPolicyIter: 200,
 };
 
 const state = {
@@ -28,7 +40,11 @@ const state = {
   obstacles: new Set(),
   policy: {},
   values: {},
-  bestPath: new Set(),
+  bestPathKeys: [],
+  bestPathSet: new Set(),
+  bestPathIndexByKey: {},
+  pathProgress: -1,
+  pathAnimationTimer: null,
 };
 
 function keyOf(r, c) {
@@ -45,22 +61,92 @@ function currentMode() {
   return checked ? checked.value : "start";
 }
 
-function clearPolicyAndValues() {
-  state.policy = {};
-  state.values = {};
-  state.bestPath.clear();
+function setHint(message) {
+  hintLine.textContent = message;
 }
 
-function updateStatus(extra = "") {
+function updateStatus(message = "") {
   const limit = state.n - 2;
   const obstacleCount = state.obstacles.size;
   const policyCount = Object.keys(state.policy).length;
   const valueCount = Object.keys(state.values).length;
-  const bestPathCount = state.bestPath.size;
-  const base = `n=${state.n}；障礙物 ${obstacleCount}/${limit}；起點：${
+  const bestPathCount = state.bestPathKeys.length;
+  statusLine.textContent = `n=${state.n}；障礙物 ${obstacleCount}/${limit}；起點：${
     state.start ? state.start.join(",") : "未設定"
   }；終點：${state.end ? state.end.join(",") : "未設定"}；策略格數：${policyCount}；價值格數：${valueCount}；路徑格數：${bestPathCount}`;
-  statusLine.textContent = extra ? `${base}｜${extra}` : base;
+
+  if (message) {
+    setHint(message);
+  }
+}
+
+function stopPathAnimation() {
+  if (state.pathAnimationTimer !== null) {
+    clearInterval(state.pathAnimationTimer);
+    state.pathAnimationTimer = null;
+  }
+}
+
+function clearBestPath() {
+  stopPathAnimation();
+  state.bestPathKeys = [];
+  state.bestPathSet.clear();
+  state.bestPathIndexByKey = {};
+  state.pathProgress = -1;
+}
+
+function setBestPath(pathCoords) {
+  clearBestPath();
+  state.bestPathKeys = pathCoords.map(([r, c]) => keyOf(r, c));
+  state.bestPathSet = new Set(state.bestPathKeys);
+  state.bestPathIndexByKey = {};
+  state.bestPathKeys.forEach((key, idx) => {
+    state.bestPathIndexByKey[key] = idx;
+  });
+}
+
+function startPathAnimation(announceIfMissing = true) {
+  if (state.bestPathKeys.length === 0) {
+    if (announceIfMissing) {
+      setHint("目前沒有可播放的最佳路徑，請先執行 1-3 訓練。");
+    }
+    return;
+  }
+
+  stopPathAnimation();
+  state.pathProgress = 0;
+  renderGrid();
+
+  if (state.bestPathKeys.length === 1) {
+    setHint("最佳路徑只有起點。");
+    return;
+  }
+
+  state.pathAnimationTimer = setInterval(() => {
+    if (state.pathProgress >= state.bestPathKeys.length - 1) {
+      stopPathAnimation();
+      setHint("最佳路徑動畫播放完成，可按「重播路徑動畫」再次播放。");
+      return;
+    }
+    state.pathProgress += 1;
+    renderGrid();
+  }, 300);
+}
+
+function clearPolicyAndValues() {
+  state.policy = {};
+  state.values = {};
+  clearBestPath();
+}
+
+function resetParameters() {
+  gammaInput.value = String(PARAM_DEFAULTS.gamma);
+  thetaInput.value = String(PARAM_DEFAULTS.theta);
+  maxIterInput.value = String(PARAM_DEFAULTS.maxIter);
+  stepRewardInput.value = String(PARAM_DEFAULTS.stepReward);
+  goalRewardInput.value = String(PARAM_DEFAULTS.goalReward);
+  maxPolicyIterInput.value = String(PARAM_DEFAULTS.maxPolicyIter);
+  updateStatus("參數已重設為預設值。");
 }
 
 function clearCellType(r, c) {
@@ -82,7 +168,7 @@ function applyClick(r, c) {
     clearCellType(r, c);
     state.start = [r, c];
     clearPolicyAndValues();
-    updateStatus("已設定起點。地圖有變更，已清除舊策略/價值。");
+    updateStatus("已設定起點。地圖有變更，已清除舊策略/價值/路徑。");
     return;
   }
 
@@ -90,7 +176,7 @@ function applyClick(r, c) {
     clearCellType(r, c);
     state.end = [r, c];
     clearPolicyAndValues();
-    updateStatus("已設定終點。地圖有變更，已清除舊策略/價值。");
+    updateStatus("已設定終點。地圖有變更，已清除舊策略/價值/路徑。");
     return;
   }
 
@@ -98,7 +184,7 @@ function applyClick(r, c) {
     if (state.obstacles.has(k)) {
       state.obstacles.delete(k);
       clearPolicyAndValues();
-      updateStatus("已移除障礙物。地圖有變更，已清除舊策略/價值。");
+      updateStatus("已移除障礙物。地圖有變更，已清除舊策略/價值/路徑。");
       return;
     }
     if (state.start && state.start[0] === r && state.start[1] === c) {
@@ -113,7 +199,7 @@ function applyClick(r, c) {
     }
     state.obstacles.add(k);
     clearPolicyAndValues();
-    updateStatus("已新增障礙物。地圖有變更，已清除舊策略/價值。");
+    updateStatus("已新增障礙物。地圖有變更，已清除舊策略/價值/路徑。");
   }
 }
 
@@ -123,7 +209,16 @@ function cellClass(r, c) {
   if (state.start && state.start[0] === r && state.start[1] === c) classes.push("start");
   if (state.end && state.end[0] === r && state.end[1] === c) classes.push("end");
   if (state.obstacles.has(key)) classes.push("obstacle");
-  if (!state.obstacles.has(key) && state.bestPath.has(key)) classes.push("path");
+
+  if (!state.obstacles.has(key) && state.bestPathSet.has(key)) {
+    classes.push("path");
+    const idx = state.bestPathIndexByKey[key];
+    if (state.pathProgress >= 0) {
+      classes.push(idx <= state.pathProgress ? "path-active" : "path-pending");
+    } else {
+      classes.push("path-active");
+    }
+  }
   return classes.join(" ");
 }
 
@@ -212,7 +307,7 @@ async function generatePolicy() {
   const result = await postJson("/api/generate-policy", buildPayload());
   state.policy = result.policy || {};
   state.values = {};
-  state.bestPath.clear();
+  clearBestPath();
   renderGrid();
   updateStatus(result.message);
 }
@@ -250,7 +345,7 @@ async function evaluatePolicy() {
   const result = await postJson("/api/evaluate-policy", payload);
 
   state.values = result.values || {};
-  state.bestPath.clear();
+  clearBestPath();
   renderGrid();
   updateStatus(
     `${result.message} iterations=${result.iterations}，delta=${Number(result.delta).toExponential(
@@ -307,13 +402,14 @@ async function trainPolicy() {
 
   state.policy = result.policy || {};
   state.values = result.values || {};
-  state.bestPath = new Set((result.best_path || []).map(([r, c]) => keyOf(r, c)));
+  setBestPath(result.best_path || []);
   renderGrid();
   updateStatus(
     `${result.message} policy_iters=${result.policy_iterations}，eval_iters=${result.eval_iterations}，delta=${Number(
       result.delta
     ).toExponential(3)}，converged=${result.converged}，reached_goal=${result.reached_goal}`
   );
+  startPathAnimation(false);
 }
 
 buildGridBtn.addEventListener("click", () => {
@@ -362,5 +458,14 @@ trainPolicyBtn.addEventListener("click", async () => {
   }
 });
 
+replayPathBtn.addEventListener("click", () => {
+  startPathAnimation(true);
+});
+
+resetParamsBtn.addEventListener("click", () => {
+  resetParameters();
+});
+
 renderGrid();
+resetParameters();
 updateStatus("可先做 1-2（隨機策略+評估），再做 1-3（加入 reward 訓練）。");
